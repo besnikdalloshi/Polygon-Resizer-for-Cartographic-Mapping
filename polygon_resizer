@@ -1,0 +1,65 @@
+import geopandas as gpd
+from shapely.geometry import Polygon, LineString
+import numpy as np
+
+# Load the shapefile
+objects = gpd.read_file("C:/Users/PC/Downloads/shp/objekte.shp")
+
+# Function to create a new rectangle (polygon) with fixed dimensions and orientation
+def create_rectangle(longest_line, centroid, width, height):
+    # Calculate the orientation angle of the longest line with respect to the x-axis
+    orientation_angle = np.arctan2(longest_line.coords[-1][1] - longest_line.coords[0][1], longest_line.coords[-1][0] - longest_line.coords[0][0])
+    
+    # Calculate half-width and half-height
+    half_width = width / 2
+    half_height = height / 2
+    
+    # Calculate the direction of the longest line (orientation angle perpendicular to the line)
+    perpendicular_angle = orientation_angle + np.pi / 2
+    
+    # Calculate the coordinates of the vertices of the rectangle
+    vertices = [
+        (centroid.x + half_width * np.cos(perpendicular_angle) + half_height * np.sin(perpendicular_angle),
+         centroid.y + half_width * np.sin(perpendicular_angle) - half_height * np.cos(perpendicular_angle)),
+        (centroid.x + half_width * np.cos(perpendicular_angle) - half_height * np.sin(perpendicular_angle),
+         centroid.y + half_width * np.sin(perpendicular_angle) + half_height * np.cos(perpendicular_angle)),
+        (centroid.x - half_width * np.cos(perpendicular_angle) - half_height * np.sin(perpendicular_angle),
+         centroid.y - half_width * np.sin(perpendicular_angle) + half_height * np.cos(perpendicular_angle)),
+        (centroid.x - half_width * np.cos(perpendicular_angle) + half_height * np.sin(perpendicular_angle),
+         centroid.y - half_width * np.sin(perpendicular_angle) - half_height * np.cos(perpendicular_angle))
+    ]
+    
+    # Create the rectangle polygon
+    rectangle = Polygon(vertices)
+    
+    return rectangle
+
+# Minimum dimensions for new rectangle
+min_width = 12.5
+min_height = 25.0
+
+# Iterate over each polygon in the GeoDataFrame
+for index, row in objects.iterrows():
+    polygon = row.geometry
+    
+    # Calculate the centroid of the polygon
+    centroid = polygon.centroid
+    
+    # Find the longest line segment in the exterior boundary of the polygon
+    max_length = 0
+    longest_line = None
+    for i in range(len(polygon.exterior.coords) - 1):  # Iterate over coordinates, excluding the closing coordinate
+        segment = LineString([polygon.exterior.coords[i], polygon.exterior.coords[i+1]])
+        segment_length = segment.length
+        if segment_length > max_length:
+            max_length = segment_length
+            longest_line = segment
+    
+    # Create a new rectangle polygon with fixed dimensions and orientation
+    new_rectangle = create_rectangle(longest_line, centroid, min_width, min_height)
+    
+    # Update the geometry of the current row
+    objects.at[index, 'geometry'] = new_rectangle
+
+# Save the modified GeoDataFrame to a new shapefile
+objects.to_file("C:/Users/PC/Downloads/shp/resized_objects.shp")
